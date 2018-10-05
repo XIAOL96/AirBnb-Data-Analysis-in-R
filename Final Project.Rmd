@@ -1,0 +1,320 @@
+---
+title: "425 Final Project"
+output:
+  html_document: default
+  pdf_document: default
+date: "December 19, 2017"
+---
+Team Members : <br>
+1. Ankush Agrawal (ankusha2) <br>
+2. Apurv Garg (apurvg2) <br>
+3. Xiao Liu (xiaol5) <br>
+
+###About the data
+The dataset used for analysis was sourced from Airbnb listings for Chicago from Inside Airbnb [link](http://insideairbnb.com/get-the-data.html). <br>
+The data consists of 95 variables and 5207 observations where each observation represents a listing.
+
+The data is available at the Inside Airbnb site and is scrapped from publicly available information from the Airbnb site. We are using the detailed listings data for Chicago. It was scrapped on 10^th^ May 2017.
+
+In this project, we have done the following:
+<br>1. Pre-processed the data for the purpose of EDA and modelling. We have treated the data for missing values, outliers, erroneous data (values which do not make sense). This also helped us understand important features of the data such as the price of a listing, number of reviews, and reviews per month(acts as proxy for booking rate), etc.
+<br>2. Used statistical modelling techniques to find interesting insights from the data.
+<br>3. Created an interactive dashboard so that the end user can get insights that we have collected in the form of charts, tables and maps.
+  
+###Getting Started : Data Preprocessing
+
+```{r}
+Chicago <- read.csv("listings 2.csv", header = TRUE,stringsAsFactors = F)
+a <- strsplit(Chicago$amenities,",")
+typeof(a)
+
+```
+
+By looking at the summary statistics generated from summary function, we saw the following things: <br>
+<br>
+a. A few variables like scrape_id are either entirely null or have only one single value populated throughout (e.g. experiences_offered) and hence, they can be removed.<br>
+```{r}
+# Removing variables that contain only a single value
+Chicago <- Chicago
+a <- apply(Chicago,2,unique)
+a[1:2]
+is.vector(a)
+length(a)
+b <- NULL
+for(i in 1:length(a))
+{
+  if(length(a[[i]])==1){
+    b <- rbind(b,names(a[[i]]))
+  }
+}
+
+b <- as.vector(b)
+head(b)
+Chicago[,b] <- NULL
+
+```
+
+This leads to a removal of 9 such variables. <br>
+
+b. All the url related variables can be removed as they contain weblinks which aren't useful for any kind of analysis<br>
+```{r}
+Chicago[,names(Chicago)[grep("url",names(Chicago))]] <- NULL
+grep("url",names(Chicago))
+```
+This leads to removal of 8 such variables. <br>
+
+c. Next we removed all those variables which have more than 80% missing values.<br>
+```{r}
+a <- apply(Chicago,2,is.na)
+head(a)
+b <- apply(a,2,sum)
+is.vector(b)  #TRUE
+is.list(b)
+head(b)
+b/5207>=0.80   #b/5207>=0.80 - missing
+b[b/5207>=0.80] 
+names(b[b/5207>=0.80])   
+Chicago[,names(b[b/5207>=0.80])] <- NULL
+Chicago$square_feet
+```
+
+This leads to a removal of 1 variable.<br>
+
+d. Based on intuition and further inspection we observed that variables such as security_deposit, weekly_price, monthly_price, first_review, last_review, jurisdiction_names, zipcode, street, market, cleaning_fee,  transit, amenities, house_rules, host_about, neighborhood_overview, host_neighbourhood, name, interaction, access, space, notes, summary, description, host_name, host_has_profile_pic, host_verifications, host_neighborhood, require_guest_profile_picture, require_guest_phone_verification, calculated_host_listings_count, host_location, transit,neighborhood_overview,house_rules,host_about,license, and requires_license do not add any value to our analysis and should be removed. Hence, we have removed 37 such variables.<br>
+```{r}
+Chicago[,c("security_deposit","weekly_price","monthly_price","first_review","last_review","jurisdiction_names","zipcode","street","market","cleaning_fee","name","interaction","access","space","notes","summary","description","host_name","host_has_profile_pic","host_verifications","host_neighborhood","require_guest_profile_picture","require_guest_phone_verification","calculated_host_listings_count", "host_location","transit","neighborhood_overview","house_rules","host_about","license", "requires_license","host_neighbourhood")] <- NULL
+```
+
+e. Removing variables with duplicated values <br>
+```{r}
+Chicago[,names(Chicago[(duplicated(t(Chicago)))])] <- NULL
+```
+
+<br>f. We observed that different listings have different amenities and hence we created flag/dummy variables for the most important amenities we thought a user looks for while booking at Airbnb.<br>
+These amenities are TV, Internet, Air Conditioning, Breakfast, Kitchen, and Pets.<br>
+```{r,message=FALSE}
+# adding amenities categories
+a <- Chicago$amenities
+Chicago$TV <- ifelse(grepl("TV",a, ignore.case = T)==T,1,0)
+Chicago$Internet <- ifelse(grepl("Internet",a, ignore.case= T)==T,1,0)
+Chicago$AirCondition <- ifelse(grepl("conditioning",a, ignore.case =T)==T,1,0)
+Chicago$Pets <- ifelse(grepl("Pet",a, ignore.case = T)==T,1,0)
+Chicago$Pets <- ifelse(grepl("Dog",a, ignore.case = T)==T,1,Chicago$Pets)
+Chicago$Pets <- ifelse(grepl("Cat",a, ignore.case = T)==T,1,Chicago$Pets)
+Chicago$Kitchen <- ifelse(grepl("Kitchen",a, ignore.case = T)==T,1,0)
+Chicago$Breakfast <- ifelse(grepl("breakfast",a, ignore.case = T)==T,1,0)
+Chicago[,c("amenities")] <- NULL
+```
+
+<br>The data types of variables which we thought might be significant were converted to the appropriate data types.<br>
+```{r,message=FALSE,warning=FALSE}
+# Converting price variable to integer
+Chicago$price <- sub("\\$","",Chicago$price)
+Chicago$price <- sub(",","",Chicago$price)
+Chicago$price <- as.integer(Chicago$price)
+
+# Changing the default character data type of categorical variable to factor
+Chicago$host_response_time <- as.factor(Chicago$host_response_time)
+Chicago$host_is_superhost <- as.factor(Chicago$host_is_superhost)
+Chicago$host_identity_verified <- as.factor(Chicago$host_identity_verified)
+Chicago$neighbourhood_cleansed <- as.factor(Chicago$neighbourhood_cleansed)
+Chicago$is_location_exact <- as.factor(Chicago$is_location_exact)
+Chicago$property_type <- as.factor(Chicago$property_type)
+Chicago$room_type <- as.factor(Chicago$room_type)
+Chicago$bed_type <- as.factor(Chicago$bed_type)
+Chicago$calendar_updated <- as.factor(Chicago$calendar_updated)
+Chicago$instant_bookable <- as.factor(Chicago$instant_bookable)
+Chicago$cancellation_policy <- as.factor(Chicago$cancellation_policy)
+
+# Treating host_response_rate and extra_people from character to a numeric variable
+Chicago$host_response_rate<- as.numeric(sub("%", "", Chicago$host_response_rate))
+Chicago$host_response_rate <- Chicago$host_response_rate/100
+Chicago$extra_people <- as.numeric(sub("\\$","",Chicago$extra_people))
+```
+
+<br>We saw that some listings have 0 as their price, which is not possible and is possibly an erroneous data. Hence, we have removed such listings.<br>
+```{r}
+# Removing listings which have price = 0
+Chicago <- Chicago[-c(717,1334,3093),]
+```
+
+<br>We also created a variable about the number of days since the listing was on Airbnb. We leveraged the variable host_since which gives us the dates since the listings have been on Airbnb and we got the number of days by subtracting this date from the 10<th> May 2017, i.e. the date when the data was scrapped.<br>
+```{r}
+Chicago$host_since <- as.Date(Chicago$host_since)
+Chicago$host_since <- as.Date("2017-05-10")-Chicago$host_since
+```
+
+<br>In order to reduce the number of levels in factor variables with large number of levels, we clubbed the factors with low number of listings. In the dataset, we observed that neighbourhood_cleansed, which gives us an idea of the nighbourhood of the listing, has 72 levels. 
+```{r,message=FALSE}
+library(dplyr)
+a <- Chicago %>% group_by(neighbourhood_cleansed) %>% summarise(len = length(neighbourhood_cleansed))
+#sum(a[(a$len<70),2])
+
+Chicago <- merge(Chicago,a,by = "neighbourhood_cleansed")
+Chicago$neighbourhood_cleansed <- as.character(Chicago$neighbourhood_cleansed)
+Chicago$neighbourhood_cleansed <- ifelse(Chicago$len<150,"Others",Chicago$neighbourhood_cleansed)
+Chicago$len <- NULL
+```
+
+###Missing Value Treatment
+We checked for all types of missing values in all variables of the final dataset. This includes is.na, "", and "N/A".
+```{r}
+# checking missing values in different columns
+missing = data.frame(col=colnames(Chicago), type = sapply(Chicago, class), 
+                     missing = sapply(Chicago, function(x) sum(is.na(x)| x=="" | x=="N/A"))/nrow(Chicago) * 100)
+
+```
+
+We treated the missing values as follows:
+```{r}
+# Replace missing values in host_response_time with the most common occurring category (its mode)
+Chicago$host_response_time<- sub("N/A","within an hour", Chicago$host_response_time)
+
+# replace missing values in host_response rate with mean values observed for host_response_time when it is within an hour
+Chicago$host_response_rate <- ifelse(is.na(Chicago$host_response_rate)==T,0.99,Chicago$host_response_rate)
+
+# Replace missing values in bathrooms, bedrooms and beds with the median value
+Chicago$bathrooms <- ifelse(is.na(Chicago$bathrooms)==T, 1, Chicago$bathrooms)
+Chicago$bedrooms <- ifelse(is.na(Chicago$bedrooms)==T,1,Chicago$bedrooms)
+Chicago$beds <- ifelse(is.na(Chicago$beds)==T,1,Chicago$beds)
+
+# Replace the missing values in review scores with the median values as well
+Chicago$review_scores_rating <- ifelse(is.na(Chicago$review_scores_rating)==T,97,Chicago$review_scores_rating)
+Chicago$review_scores_accuracy <- ifelse(is.na(Chicago$review_scores_accuracy)==T,10,Chicago$review_scores_accuracy)
+Chicago$review_scores_cleanliness <- ifelse(is.na(Chicago$review_scores_cleanliness)==T,10,Chicago$review_scores_cleanliness)
+Chicago$review_scores_checkin <- ifelse(is.na(Chicago$review_scores_checkin)==T,10,Chicago$review_scores_checkin)
+Chicago$review_scores_communication <- ifelse(is.na(Chicago$review_scores_communication)==T,10,Chicago$review_scores_communication)
+Chicago$review_scores_location <- ifelse(is.na(Chicago$review_scores_location)==T,10,Chicago$review_scores_location)
+Chicago$review_scores_value <- ifelse(is.na(Chicago$review_scores_value)==T,10,Chicago$review_scores_value)
+Chicago$reviews_per_month <- ifelse(is.na(Chicago$reviews_per_month)==T,1.55,Chicago$reviews_per_month)
+
+```
+
+###Outliers
+```{r,message=FALSE,warning=FALSE}
+# Histogram of price
+library(ggplot2)
+ggplot(data=Chicago, aes(price)) + 
+  geom_histogram(fill="red") + 
+  labs(title="Histogram of Price") +
+  labs(x="Price", y="Count")
+
+# Percentile of price
+quantile(Chicago$price, c(.9, .95, .97, 0.975, 0.98, 0.99, 0.995, 0.999, 0.9999))
+```
+
+<br>As we can see from the histogram as well as the percentile distribution of Price, there are extreme values in Price. So we performed Winsorization at 99% level and captured the maximum value of price at 650 USD.<br>
+```{r}
+# Capture the extreme values of Price at 99 percentile level
+Chicago$price <- ifelse(Chicago$price>650,650,Chicago$price)
+```
+
+
+###Dashboard
+[AirBnB Analysis Dashboard](http://apurvg2.shinyapps.io/airbnb/)<br>
+
+<br>Our UI should contain the following components:<br> 
+
+A map which allows users to look at Airbnb listings on a map. There are also filters based on the Price range and Neighbourhoods.<br>
+The map on the 2nd tab shows the distribution of listings based on the prices for different room types.<br>
+Graphs provide the functionalities for users to have a look at box-plots for different prices and the number of booking values based on different categorical variables like room_type, bed_type, cancellation policy, and property type.<br>
+User can also look at the variation of prices and number of bookings vs host_since(a scatter plot). We have provided multiple filters like number of bathroom, bedrooms and guests so that user can see the metrics based on their requirements.<br>
+
+**Note: We have used plotly to make graphs which is an interactive graph library. It allows user to subselect factors in the graph by clicking on the legends.**<br>
+
+###Analysis 1: Comparing the booking rate based on cancellation policy
+<br>We wish to know whether the booking rate is different for different cancellation policies.<br>
+
+H0: The cancellation policy has no effect on the average booking rate.<br>
+H1: The average booking rates are different with different cancellation policies.<br>
+<br>*Assumption: The monthly booking rate here is based on reviews per month. This implies that it is not actually the booking rate (including cancellation) but it is the booking rate where people have actually stayed at the accommodations(or the staying rate).* <br>
+
+**Note: We used variable reviews_per_month as a measure for the bookings rate.**<br>
+
+We first got a box-plot for qualitative check.
+```{r,warning=FALSE,message=FALSE}
+# Visualize the distribution of reviews_per_month for different cancellation policy using a boxplot
+library(ggpubr)
+ggboxplot(Chicago, x = "cancellation_policy", y = "reviews_per_month", 
+          color = "cancellation_policy",
+          ylab = "Bookings per month", xlab = "Cancellation Policy")
+
+```
+
+<br>Initial inspection of the data using the boxplot suggests that there are differences in the booking rates for different cancellation policies: the accommodations with Strict and Moderate cancellation policies have higher average booking rates (staying rate). To investigate for if there are significant differences among groups quantitatively, we then fited an one-way ANOVA model as below.<br>
+
+```{r,set-options}
+options(width = 90)
+# Compute the analysis of variance
+anova1 <- aov(reviews_per_month ~ cancellation_policy, data = Chicago)
+
+# Summary of the analysis
+summary(anova1)
+```
+
+As the p-value is less than the significance level 0.05 in the model summary, we conclude that there are significant differences among the groups of cancellation policy.<br>
+
+In one-way ANOVA test, a significant p-value indicates that some of the group means are different, but we don't know which pairs of groups are different. <br>
+
+As the ANOVA test is significant, we can use Tukey's method for performing multiple pairwise-comparisons between the means of pairs of groups.
+
+```{r}
+TukeyHSD(anova1)
+```
+
+<br>**We can see from the results that the average booking rate is significantly different for moderate and flexible cancellation policies as well as Strict and flexible cancellation policies.** <br>
+
+**Therefore, we rejected our null hypothesis, namely, there are significant difference among different cancellation policies. **<br>
+
+###Analysis 2: Comparing the Review Scores based on bed type
+
+<br>This analysis is done to see if the type of bed provided by a host in Airbnb has any effects on the average review score for that listing<br>
+
+H0: Different bed types do not have any effects on average review scores.<br>
+H1: The average review score changes with different bed types.<br>
+
+<br>*Assumption: Different bed types are assumed to be providing different comfort levels(bed types are proportional to comfort), therefore, the average review scores should be different for different bed types.* <br>
+
+We first got a box-plot for qualitative check.
+```{r}
+# Visualizing the distribution of review_scores_rating for different bed type using a boxplot
+ggboxplot(Chicago, x = "bed_type", y = "review_scores_rating", 
+          color = "bed_type",
+          ylab = "Review Scores Rating", xlab = "Bed Type")
+```
+
+<br>Initial inspection of the data using the boxplot suggests that there are no differences in the review rating for different bed types. To investigate for if there are differences among different groups quantitatively, we fitted an one-way ANOVA model.<br>
+
+```{r}
+# Compute the analysis of variance
+anova2 <- aov(review_scores_rating ~ bed_type, data = Chicago)
+
+# Summary of the analysis
+summary(anova2)
+```
+
+<br>**Since P-value is larger than 0.05, we accpet the null hypothesis that the average review scores do not change with the bed types. That is not quite what we epxpected based on our intuition. Intuitively, people prefer comfort and hence would prefer "Real Bed" versus "Sofa" or "Couch".**<br>
+<br>**However, our results imply that when it comes to high average review scores, bed type does not have any significant effects on it. Also, this shows that people tend to base their ratings not just on the comfort of beds.**<br>
+
+###Analysis 3: Predicting the prices of listings & Finding factors impacting prices
+
+```{r,echo=FALSE}
+options(width = 100)
+##lm
+price_model <- lm(price ~ as.factor(neighbourhood_cleansed) + host_since + Breakfast + Kitchen + Pets + AirCondition + Internet + TV + reviews_per_month + review_scores_rating + number_of_reviews + review_scores_accuracy + review_scores_value + review_scores_cleanliness + review_scores_checkin + review_scores_communication + review_scores_location + as.factor(cancellation_policy) + guests_included + beds + as.factor(bed_type) + bathrooms + as.factor(property_type) + as.factor(room_type), 
+   data = Chicago)
+
+summary(price_model)
+```
+
+Following are the results that we obtained from the above linear regression model along with the hypothesis/explanations of behaviors of the variables:
+
+<br>**Based on the p-values for the above regression model, we can say that amenities like TV and Air Conditioning significantly impact the prices. Since the Beta-values are positive, we can say that TV and AC have positive effects on prices (considering other variables are fixed). This can be because AC and TV are comparatively expensive amenties.**<br>
+
+<br>**Also, the booking rate is inversely proportional to the prices considering the other factors remain unchanged.**<br>
+
+<br>**Number of guests, number of beds, and number of bathrooms directly affect the prices. As the number of guests, beds or bathrooms increases, prices increase (considering amenities/comfort and location is same). This is reasonable and hotels share the same theory.**<br>
+
+<br>**The categorical variables: neighbourhood, property type, and room type have significant impacts on prices. This is generally true as properties in luxurious localities will be more expensive than other housing areas where provide similar services. Also, a shared room will be cheaper than a whole house/apartment in the same locality.**<br>
+
+
